@@ -1,0 +1,22 @@
+HVGDecision 0.9.1 包内容
+
+普通用户安装：
+  python -m pip install ./hvgdecision-0.9.1-py3-none-any.whl
+
+主要文档：
+  README_CN.md                         中文完整教程
+  README.md                            英文 README
+  INSTALL_CN.md                        WHL 安装说明
+  docs/CROSS_DOMAIN_TUTORIAL_CN.md    两个独立 h5ad 的跨数据集教程
+  docs/INPUT_TUTORIAL_CN.md           raw counts + 本地 HVG 输入教程
+  docs/METHODS.md                      方法公式
+
+示例：
+  examples/00_raw_counts_auto.py
+  examples/01_within_domain.py
+  examples/02_cross_domain_two_h5ad.py
+  examples/03_local_hvg_table.py
+
+正式 mode：
+  within_domain
+  cross_domain

@@ -1,0 +1,24 @@
+mode: within_domain
+input_h5ad: /path/to/data.h5ad
+dataset_name: example_within
+output_dir: ./HVGDecision_results/example_within
+counts_layer: auto
+batch_key: donor
+label_key: cell_type
+split_key: donor
+reference_values: [D1, D2, D3]
+query_values: [D4]
+biology_keys: [cell_type]
+initial_hvg: 2000
+hvg_method: seurat_v3
+n_permutations: 100
+n_bootstraps: 20
+permutation_alpha: 0.05
+bootstrap_min_pass_fraction: 0.80
+leakage_z_floor: 1.0
+risk_z_floor: 1.0
+biology_z_ceiling: 0.0
+marker_min_log_effect: 0.50
+marker_replication_fraction: 0.80
+marker_min_eligible_donors: 2
+marker_min_cells_per_side: 10
