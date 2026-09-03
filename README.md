@@ -11,7 +11,7 @@ within_domain
 cross_domain
 ```
 
-- `within_domain`：Reference 与 Query 属于同一或相近实验体系，例如同一组织、多 donor、多 batch。
+- `within_domain`：Reference 与 Query 属于相近实验体系，例如同一组织、多 donor、多 batch。
 - `cross_domain`：Reference 与 Query 来自不同 dataset、不同技术或明显不同的实验 domain。
 
 ---
