@@ -255,7 +255,7 @@ s_{cg}+\epsilon
 ```math
 I_g
 =
-\operatorname{median}_c\left(I_{gc}\right)
+\mathrm{median}_c\left(I_{gc}\right)
 ```
 
 ## 4.5 Within-domain risk
@@ -453,7 +453,7 @@ E_g
 \left|\mu_{Q,g}-\mu_{R,g}\right|
 }{
 \sqrt{
-\left(\operatorname{Var}_{R,g}+\operatorname{Var}_{Q,g}\right)/2
+\left(\mathrm{Var}_{R,g}+\mathrm{Var}_{Q,g}\right)/2
 }
 +
 \epsilon
@@ -473,13 +473,13 @@ D_g
 ```math
 E_g^{*}
 =
-\operatorname{Pct}\left(E_g\right)
+\mathrm{Pct}\left(E_g\right)
 ```
 
 ```math
 D_g^{*}
 =
-\operatorname{Pct}\left(D_g\right)
+\mathrm{Pct}\left(D_g\right)
 ```
 
 ## 6.4 Dataset/domain shift score
@@ -566,7 +566,7 @@ R_g^{\mathrm{cross}}
 =
 \mathcal{H}_{\mathrm{base}}^{Q}
 \setminus
-\operatorname{TopK}
+\mathrm{TopK}
 \left(
 R_g^{\mathrm{cross}}
 \right)
@@ -970,12 +970,13 @@ dataset × integration_method
 ```math
 S_{\mathrm{Transfer}}
 =
-\operatorname{mean}
-\left(
-\widetilde{\mathrm{MacroF1}},
-\widetilde{\mathrm{BalancedAccuracy}},
+\frac{
+\widetilde{\mathrm{MacroF1}}
++
+\widetilde{\mathrm{BalancedAccuracy}}
++
 \widetilde{\mathrm{RareCellMacroF1}}
-\right)
+}{3}
 ```
 
 ## 12.2 Batch correction
@@ -983,11 +984,11 @@ S_{\mathrm{Transfer}}
 ```math
 S_{\mathrm{Batch}}
 =
-\operatorname{mean}
-\left(
-\widetilde{\mathrm{DatasetMixing}},
+\frac{
+\widetilde{\mathrm{DatasetMixing}}
++
 \widetilde{\mathrm{DonorMixingWithinCellType}}
-\right)
+}{2}
 ```
 
 ## 12.3 Biological fidelity
@@ -995,12 +996,13 @@ S_{\mathrm{Batch}}
 ```math
 S_{\mathrm{Bio}}
 =
-\operatorname{mean}
-\left(
-\widetilde{\mathrm{ARI}},
-\widetilde{\mathrm{NMI}},
+\frac{
+\widetilde{\mathrm{ARI}}
++
+\widetilde{\mathrm{NMI}}
++
 \widetilde{\mathrm{CellTypeSilhouette}}
-\right)
+}{3}
 ```
 
 ## 12.4 Overall
