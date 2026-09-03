@@ -1,0 +1,982 @@
+# HVGDecision 0.9.1
+
+**Integration-aware HVG refinement before single-cell data integration.**
+
+HVGDecision is an upstream feature-selection/refinement tool for single-cell RNA-seq integration workflows. It does **not** replace integration methods such as Seurat CCA, Harmony, BBKNN, Scanorama, or scVI. Instead, it refines the HVG panel supplied to those downstream methods.
+
+Version 0.9.1 requires the user to explicitly choose one of two analysis modes:
+
+```text
+within_domain
+cross_domain
+```
+
+- `within_domain`: multiple donors or batches from the same or a closely related experimental domain.
+- `cross_domain`: Reference and Query differ by dataset, technology, protocol, or another major domain shift.
+
+---
+
+## 1. Installation for normal users: install the WHL
+
+After extracting the release ZIP, install the bundled wheel:
+
+```bash
+python -m pip install ./hvgdecision-0.9.1-py3-none-any.whl
+```
+
+If the wheel is inside `dist/`:
+
+```bash
+python -m pip install ./dist/hvgdecision-0.9.1-py3-none-any.whl
+```
+
+To upgrade an older installation:
+
+```bash
+python -m pip install --upgrade ./hvgdecision-0.9.1-py3-none-any.whl
+```
+
+Verify the installation:
+
+```bash
+python -c "import hvgdecision as hd; print(hd.__version__); print(hd.VALID_MODES)"
+```
+
+Expected output:
+
+```text
+0.9.1
+('within_domain', 'cross_domain')
+```
+
+`pip install -e .` is an editable/development installation and is **not** the recommended installation method for normal users.
+
+---
+
+## 2. Raw counts are detected automatically
+
+The default behavior is:
+
+```python
+counts_layer="auto"
+```
+
+HVGDecision audits candidate expression sources instead of asking the user to guess where raw counts are stored.
+
+The search includes common count-layer names such as:
+
+```text
+counts
+raw_counts
+raw.counts
+rawcounts
+umi_counts
+count
+```
+
+and also checks:
+
+```text
+adata.raw.X
+adata.X
+other adata.layers[...]
+```
+
+Candidate matrices are validated for count-like properties, including non-negativity and near-integer values.
+
+### Inspect the detected source
+
+```python
+import scanpy as sc
+import hvgdecision as hd
+
+adata = sc.read_h5ad("your_data.h5ad")
+
+count_check = hd.find_raw_counts(adata)
+
+print("valid:", count_check.valid)
+print("selected:", count_check.location)
+print(count_check.audit)
+```
+
+A typical result may be:
+
+```text
+valid: True
+selected: adata.layers['counts']
+```
+
+Normally, no manual count-layer selection is needed:
+
+```python
+study = hd.setup_reference_query(
+    adata,
+    mode="within_domain",
+    batch_key="donor",
+    label_key="cell_type",
+    reference=["D1", "D2"],
+    query=["D3"],
+    counts_layer="auto",
+)
+```
+
+The full source audit is written to:
+
+```text
+raw_count_source_audit.csv
+```
+
+### Manually specify a source only when needed
+
+If raw counts are in a custom layer:
+
+```python
+counts_layer="RNA_counts"
+```
+
+If raw counts are in `adata.raw.X`:
+
+```python
+counts_layer="raw"
+```
+
+If `adata.X` itself contains raw integer counts:
+
+```python
+counts_layer=None
+```
+
+---
+
+## 3. Mode selection
+
+Every analysis must explicitly provide `mode`.
+
+### Mode A: `within_domain`
+
+Use this mode when Reference and Query belong to the same or a closely related experimental domain, for example:
+
+- one tissue with multiple donors;
+- one protocol with several batches;
+- donor-held-out or batch-held-out integration evaluation.
+
+The goal is to identify HVGs that remain strongly associated with donor/batch structure after accounting for biological identity.
+
+### Mode B: `cross_domain`
+
+Use this mode when Reference and Query differ substantially, for example:
+
+- cross-dataset integration;
+- cross-technology integration;
+- 10X Reference to Smart-seq2 Query;
+- different experimental platforms or protocols.
+
+Cross-domain mode refines the **Query HVG panel**.
+
+---
+
+# 4. Within-domain method
+
+## 4.1 Biological explained variance
+
+For gene `g`, biological support is quantified as:
+
+```math
+B_g
+=
+\frac{
+\sum_c n_c\left(\bar{x}_{cg}-\bar{x}_g\right)^2
+}{
+\sum_i\left(x_{ig}-\bar{x}_g\right)^2+\epsilon
+}
+```
+
+## 4.2 Residualization within biological strata
+
+```math
+r_{ig}
+=
+x_{ig}-\bar{x}_{c_i g}
+```
+
+## 4.3 Donor leakage
+
+```math
+L_g
+=
+\frac{
+\sum_d n_d\bar{r}_{dg}^{2}
+}{
+\sum_i r_{ig}^{2}+\epsilon
+}
+```
+
+## 4.4 Donor × biology interaction instability
+
+For each eligible biological stratum `c`:
+
+```math
+I_{gc}
+=
+\frac{
+\max_d \bar{x}_{cdg}-\min_d \bar{x}_{cdg}
+}{
+s_{cg}+\epsilon
+}
+```
+
+The gene-level interaction score is:
+
+```math
+I_g
+=
+\mathrm{median}_c\left(I_{gc}\right)
+```
+
+## 4.5 Within-domain risk
+
+All components are robustly standardized across genes.
+
+```math
+R_g^{\mathrm{within}}
+=
+Z\left(L_g\right)
++
+0.75 Z\left(I_g\right)
+-
+Z\left(B_g\right)
+```
+
+The raw risk is robustly standardized again to obtain `Z_R(g)`.
+
+## 4.6 Conditional permutation test
+
+Donor labels are permuted within biological strata:
+
+```math
+p_g
+=
+\frac{
+1+\sum_{p=1}^{P}
+\mathbf{1}\left(L_g^{(p)}\ge L_g\right)
+}{
+P+1
+}
+```
+
+Benjamini-Hochberg correction is then applied to obtain `q_g`.
+
+Default:
+
+```text
+P = 100
+FDR threshold = 0.05
+```
+
+## 4.7 Bootstrap recurrence
+
+A bootstrap replicate passes when all three conditions are met:
+
+```math
+Z\left(L_g^{(b)}\right)\ge 1
+```
+
+```math
+Z_R^{(b)}(g)\ge 1
+```
+
+```math
+Z\left(B_g^{(b)}\right)\le 0
+```
+
+The recurrence fraction is:
+
+```math
+F_g^{\mathrm{boot}}
+=
+\frac{1}{N_{\mathrm{boot}}}
+\sum_b
+\mathbf{1}\left[\mathrm{pass}_b\right]
+```
+
+Default:
+
+```text
+N_boot = 20
+minimum recurrence = 0.80
+```
+
+## 4.8 Final within-domain harmful gate
+
+```math
+H_g^{\mathrm{within}}
+=
+\mathbf{1}\left[
+q_g\le 0.05
+\;\land\;
+Z(L_g)\ge 1
+\;\land\;
+Z_R(g)\ge 1
+\;\land\;
+Z(B_g)\le 0
+\;\land\;
+F_g^{\mathrm{boot}}\ge 0.80
+\;\land\;
+\neg P_g
+\right]
+```
+
+`P_g` denotes replicated-marker or explicit hard protection.
+
+The final panel is:
+
+```math
+\mathcal{H}_{\mathrm{final}}
+=
+\mathcal{H}_{\mathrm{base}}
+\setminus
+\left\{g:H_g^{\mathrm{within}}=1\right\}
+```
+
+Zero deletion is a valid outcome.
+
+---
+
+# 5. Within-domain tutorial
+
+Assume:
+
+```text
+adata.obs['donor']
+adata.obs['cell_type']
+```
+
+with D1-D6 as Reference donors and D7-D8 as Query donors.
+
+```python
+import scanpy as sc
+import hvgdecision as hd
+
+adata = sc.read_h5ad("PBMC.h5ad")
+
+# Optional: inspect the automatically detected count source.
+check = hd.find_raw_counts(adata)
+print(check.location)
+print(check.audit)
+
+study = hd.setup_reference_query(
+    adata,
+    mode="within_domain",
+    batch_key="donor",
+    label_key="cell_type",
+    reference=["D1", "D2", "D3", "D4", "D5", "D6"],
+    query=["D7", "D8"],
+    counts_layer="auto",
+    dataset_name="PBMC",
+    output_dir="HVGDecision_results/PBMC",
+)
+
+result = study.run(
+    hvg_method="seurat_v3",
+    return_details=True,
+)
+
+print("recommended base HVG N:", result.recommended_n_hvg)
+print("harmful genes:", result.harmful_genes)
+print("final HVG N:", result.final_n_hvg)
+print("first final genes:", result.final_hvg_genes[:20])
+```
+
+`study.run()` in `within_domain` mode first performs the Reference-only minimum-sufficient HVG budget search and then runs harmful-gene refinement.
+
+To run the budget-search stage explicitly:
+
+```python
+budget_result = study.find_best_hvg(return_details=True)
+```
+
+`find_best_hvg()` is only available in `within_domain` mode.
+
+---
+
+# 6. Cross-domain method
+
+Cross-domain mode refines a **Query HVG panel** while using Reference biological information and label-free Reference-to-Query distribution shift.
+
+Query true cell-type labels are **not used** during feature selection.
+
+## 6.1 Reference technical-risk percentile
+
+The Reference rule risk is converted to a percentile:
+
+```math
+R_g\in[0,1]
+```
+
+## 6.2 Reference-to-Query mean-expression shift
+
+```math
+E_g
+=
+\frac{
+\left|\mu_{Q,g}-\mu_{R,g}\right|
+}{
+\sqrt{
+\left(\mathrm{Var}_{R,g}+\mathrm{Var}_{Q,g}\right)/2
+}
++
+\epsilon
+}
+```
+
+## 6.3 Detection-rate shift
+
+```math
+D_g
+=
+\left|\pi_{Q,g}-\pi_{R,g}\right|
+```
+
+The two shift components are converted to percentile scores:
+
+```math
+E_g^{*}
+=
+\mathrm{Pct}\left(E_g\right)
+```
+
+```math
+D_g^{*}
+=
+\mathrm{Pct}\left(D_g\right)
+```
+
+## 6.4 Dataset/domain shift score
+
+```math
+S_g
+=
+0.70 E_g^{*}
++
+0.30 D_g^{*}
+```
+
+## 6.5 Reference biology protection
+
+```math
+B_g
+=
+0.60 B_g^{\mathrm{celltype}}
++
+0.25 M_g
++
+0.15 P_g
+```
+
+where:
+
+- `B_g^{celltype}` is the percentile-scaled Reference cell-type biological effect;
+- `M_g` is marker replication across eligible Reference donors;
+- `P_g` is an explicit/hard protection indicator.
+
+Hard-protected genes are excluded from deletion candidates.
+
+## 6.6 Dual technical consensus
+
+```math
+T_g
+=
+\min\left(R_g,S_g\right)
+```
+
+Agreement between the two technical evidence sources is:
+
+```math
+A_g
+=
+1-
+\left|R_g-S_g\right|
+```
+
+## 6.7 Final Cross-domain Rule V3
+
+```math
+R_g^{\mathrm{cross}}
+=
+\min\left(R_g,S_g\right)
+\left[
+0.75
++
+0.25
+\left(
+1-
+\left|R_g-S_g\right|
+\right)
+\right]
+\left(
+1-0.75B_g
+\right)
+```
+
+This formulation requires simultaneous technical evidence from Reference risk and Reference-to-Query domain shift, rewards agreement between the two sources, and reduces deletion priority for genes with strong Reference biological support.
+
+## 6.8 Final Query HVG panel
+
+Let the original Query HVG panel be:
+
+```math
+\mathcal{H}_{\mathrm{base}}^{Q}
+```
+
+After excluding hard-protected genes, the top-`k` eligible genes ranked by `R_g^{cross}` are removed:
+
+```math
+\mathcal{H}_{\mathrm{final}}^{Q}
+=
+\mathcal{H}_{\mathrm{base}}^{Q}
+\setminus
+\mathrm{TopK}
+\left(
+R_g^{\mathrm{cross}}
+\right)
+```
+
+The deletion budget is controlled by:
+
+```python
+cross_domain_delete_budget=5
+```
+
+`mode` and deletion budget have different roles:
+
+```text
+mode="cross_domain"
+    selects the Cross-domain Rule V3 algorithm
+
+cross_domain_delete_budget=5
+    removes the top 5 eligible Cross-domain risk genes
+```
+
+---
+
+# 7. Cross-domain tutorial: two independent h5ad files
+
+This is the recommended workflow for cross-dataset or cross-technology analysis.
+
+Example:
+
+```text
+Reference = reference_10x.h5ad
+Query     = query_smartseq2.h5ad
+```
+
+## 7.1 Read Reference and Query independently
+
+```python
+import scanpy as sc
+import hvgdecision as hd
+
+ref = sc.read_h5ad("reference_10x.h5ad")
+qry = sc.read_h5ad("query_smartseq2.h5ad")
+```
+
+Reference should contain a batch/donor column and a biological label column, for example:
+
+```text
+donor
+cell_type
+```
+
+Query must contain a batch/donor column. Query true biological labels are optional and are not used by Cross-domain feature selection.
+
+If the batch column has a different name in Query, create a common column before preparation:
+
+```python
+qry.obs["donor"] = qry.obs["sample_id"].astype(str)
+```
+
+## 7.2 Automatically detect raw counts in each dataset
+
+```python
+ref_check = hd.find_raw_counts(ref)
+qry_check = hd.find_raw_counts(qry)
+
+print("Reference:", ref_check.location)
+print("Query:", qry_check.location)
+```
+
+Reference and Query do **not** need to store counts in the same AnnData location.
+
+For example:
+
+```text
+Reference -> adata.layers['counts']
+Query     -> adata.raw.X
+```
+
+## 7.3 Automatically align genes and build one cross-domain AnnData
+
+```python
+combined, input_audit = hd.prepare_cross_domain_inputs(
+    ref,
+    qry,
+    reference_counts="auto",
+    query_counts="auto",
+    domain_key="hvgdecision_domain",
+    reference_name="reference",
+    query_name="query",
+    return_audit=True,
+)
+
+print(input_audit)
+print(combined)
+```
+
+This helper:
+
+1. audits Reference raw counts;
+2. audits Query raw counts;
+3. reads the validated count matrices;
+4. finds shared gene identifiers;
+5. aligns Reference and Query to the same gene order;
+6. combines the cells;
+7. stores raw counts in `combined.layers['counts']`;
+8. creates `combined.obs['hvgdecision_domain']`.
+
+## 7.4 Create a cross-domain study
+
+```python
+study = hd.setup_reference_query(
+    combined,
+    mode="cross_domain",
+    batch_key="donor",
+    label_key="cell_type",
+    split_key="hvgdecision_domain",
+    reference=["reference"],
+    query=["query"],
+    counts_layer="auto",
+    dataset_name="Skin_10X_to_SS2",
+    output_dir="HVGDecision_results/Skin_cross_domain",
+)
+```
+
+## 7.5 Let HVGDecision calculate the Query HVG panel
+
+```python
+result = study.run(
+    n_hvg=2000,
+    hvg_method="seurat_v3",
+    cross_domain_delete_budget=5,
+    return_details=True,
+)
+
+print("removed genes:", result.harmful_genes)
+print("final HVG N:", result.final_n_hvg)
+print("first final genes:", result.final_hvg_genes[:20])
+```
+
+---
+
+# 8. Use a local HVG table instead of recalculating HVGs
+
+HVGDecision can refine an externally generated HVG panel from Seurat, Scanpy, or another workflow.
+
+Supported input formats include:
+
+```text
+.csv
+.tsv
+.txt
+```
+
+## 8.1 CSV with a `gene` column
+
+Example `my_hvg.csv`:
+
+```text
+gene
+IL7R
+LTB
+MALAT1
+CCR7
+```
+
+Use:
+
+```python
+result = study.refine_hvg(
+    "my_hvg.csv",
+    method_name="Seurat_v3",
+    initial_n_hvg=2000,
+    return_details=True,
+)
+```
+
+## 8.2 TSV
+
+```python
+result = study.refine_hvg(
+    "my_hvg.tsv",
+    method_name="Seurat_v3",
+    initial_n_hvg=2000,
+    return_details=True,
+)
+```
+
+## 8.3 Headerless TXT: one gene per line
+
+Example `my_hvg.txt`:
+
+```text
+IL7R
+LTB
+MALAT1
+CCR7
+```
+
+Use:
+
+```python
+result = study.refine_hvg(
+    "my_hvg.txt",
+    method_name="external",
+    initial_n_hvg=2000,
+    return_details=True,
+)
+```
+
+The first gene is not treated as a header.
+
+## 8.4 Full ranking table
+
+A table may also contain method, budget, rank, and gene columns:
+
+```text
+method,n_hvg,gene_rank,gene
+Seurat_v3,2000,1,IL7R
+Seurat_v3,2000,2,LTB
+Seurat_v3,2000,3,MALAT1
+```
+
+Use:
+
+```python
+result = study.refine_hvg(
+    "hvg_full_table.csv",
+    method_name="Seurat_v3",
+    gene_column="gene",
+    rank_column="gene_rank",
+    budget_column="n_hvg",
+    method_column="method",
+    initial_n_hvg=2000,
+    return_details=True,
+)
+```
+
+### Meaning of an imported HVG panel by mode
+
+```text
+mode="within_domain"
+    imported HVG file = frozen within-domain base panel
+
+mode="cross_domain"
+    imported HVG file = frozen Query base HVG panel
+```
+
+Therefore, for Cross-domain analysis, the uploaded/local HVG list should be the **Query HVG panel**.
+
+---
+
+# 9. Reading the final result
+
+```python
+adata_final = result.adata
+
+final_hvgs = adata_final.var_names[
+    adata_final.var["highly_variable"]
+].tolist()
+
+harmful_genes = adata_final.var_names[
+    adata_final.var["hvgdecision_harmful"]
+].tolist()
+
+print("final HVGs:", len(final_hvgs))
+print("removed genes:", harmful_genes)
+```
+
+HVGDecision does not subset the AnnData object to HVGs only. The final object retains the full available gene space; the refined panel is marked with:
+
+```text
+adata.var['highly_variable'] == True
+```
+
+Important `var` fields include:
+
+```text
+highly_variable
+hvgdecision_candidate
+hvgdecision_risk_score
+hvgdecision_risk_flagged
+hvgdecision_marker_protected
+hvgdecision_harmful
+hvgdecision_removed
+hvgdecision_final
+hvgdecision_reason
+```
+
+---
+
+# 10. Main output files
+
+Every analysis writes:
+
+```text
+raw_count_source_audit.csv
+```
+
+Typical Within-domain output includes:
+
+```text
+00_budget_search/
+01_hvg_decision/
+    hvg_decision_table.csv
+    harmful_genes.csv
+    final_hvg_genes.csv
+    decision.json
+```
+
+Typical Cross-domain output includes:
+
+```text
+REFERENCE_RULE_V1_full_audit_for_crossdomain.csv
+CROSSDOMAIN_reference_query_shift_audit.csv
+CROSSDOMAIN_RULE_V3_ranking.csv
+CROSSDOMAIN_RULE_V3_budget_gene_membership.csv
+CROSSDOMAIN_RULE_V3_selection_manifest.csv
+CROSSDOMAIN_RULE_V3_removal_audit.csv
+```
+
+---
+
+# 11. CLI
+
+The CLI operates on a prepared/combined h5ad file.
+
+Within-domain:
+
+```bash
+hvgdecision refine \
+  --config configs/within_domain_example.yml \
+  --mode within_domain
+```
+
+Cross-domain:
+
+```bash
+hvgdecision refine \
+  --config configs/cross_domain_example.yml \
+  --mode cross_domain \
+  --delete-budget 5
+```
+
+`mode:` may also be specified in YAML. If both CLI and YAML provide a mode, the CLI value overrides YAML.
+
+---
+
+# 12. Optional three-domain benchmark score
+
+This scoring helper is for **benchmark evaluation only**. It is not used for feature selection.
+
+Within each fixed `dataset × integration_method` task, each metric is min-max normalized across feature panels.
+
+## Transfer
+
+```math
+S_{\mathrm{Transfer}}
+=
+\frac{
+\widetilde{\mathrm{MacroF1}}
++
+\widetilde{\mathrm{BalancedAccuracy}}
++
+\widetilde{\mathrm{RareCellMacroF1}}
+}{3}
+```
+
+## Batch correction
+
+```math
+S_{\mathrm{Batch}}
+=
+\frac{
+\widetilde{\mathrm{DatasetMixing}}
++
+\widetilde{\mathrm{DonorMixingWithinCellType}}
+}{2}
+```
+
+## Biological fidelity
+
+```math
+S_{\mathrm{Bio}}
+=
+\frac{
+\widetilde{\mathrm{ARI}}
++
+\widetilde{\mathrm{NMI}}
++
+\widetilde{\mathrm{CellTypeSilhouette}}
+}{3}
+```
+
+## Overall
+
+```math
+S_{\mathrm{Overall}}
+=
+0.30 S_{\mathrm{Transfer}}
++
+0.40 S_{\mathrm{Batch}}
++
+0.30 S_{\mathrm{Bio}}
+```
+
+This should be described as a **scIB-inspired three-domain composite score**, not as an exact scIB score.
+
+---
+
+# 13. Important leakage rule
+
+### Within-domain
+
+Feature-selection risk uses Reference expression, Reference batch identities, and Reference biological labels. Query expression and Query labels do not participate in the within-domain risk decision.
+
+### Cross-domain
+
+Feature selection uses:
+
+- Reference raw counts;
+- Reference batch/donor identities;
+- Reference biological labels;
+- Query raw counts;
+- Query batch identities for Query HVG construction and Reference-to-Query shift estimation.
+
+**Query true biological labels are never used by the Cross-domain Rule V3 feature-selection step.** They may be used only later for independent downstream evaluation.
+
+---
+
+# 14. Minimal API summary
+
+```python
+import hvgdecision as hd
+
+print(hd.__version__)
+print(hd.VALID_MODES)
+
+hd.find_raw_counts(...)
+hd.prepare_cross_domain_inputs(...)
+hd.setup_reference_query(...)
+hd.three_domain_scores(...)
+```
+
+For Chinese instructions, see `README_CN.md`.
