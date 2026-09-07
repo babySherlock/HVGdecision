@@ -1,0 +1,18 @@
+{
+  "cell_level": {
+    "source": "harmful_core_v1_v2_v3.py",
+    "source_sha256": "8299bee932cfb38a6aa49e709e0e6f41d67f79f0f045d2c7abaee3f52177181c",
+    "entry_point": "find_harmful_v1_celllevel",
+    "adaptations": "Function/dependency extraction only; formulas, sampling and gates unchanged.",
+    "packaged_sha256": "b6624780618faab68341a1bef8cdd717cdbcc14a78352be34c9f231bde12e8b2",
+    "regression_fixture": "tests/fixtures/cell_level_original.csv"
+  },
+  "donor_aware": {
+    "source": "build_scenario_specific_notebooks.py",
+    "source_sha256": "2283c11bb4d66047ab45998789b3719f79e4c83e7c6e83f58dd7f7939db92fe0",
+    "entry_point": "find_harmful_within_protocol_donor_replicate",
+    "adaptations": "Function extraction; no notebook monkeypatch; per-call config; no progress print; defensive dense copy. Formulas and default gates unchanged. Writable percentile-rank array for pandas 3; no statistical change.",
+    "packaged_sha256": "8ab004afd11b15fb3de65ec69f458974f5492169c71b95dcb7825dfa5b3a4a89",
+    "regression_fixture": "tests/fixtures/donor_aware_original.csv"
+  }
+}

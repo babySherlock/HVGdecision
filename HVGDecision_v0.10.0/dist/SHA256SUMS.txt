@@ -1,0 +1,2 @@
+3078c6dac04767eccf2751d954bd95c42e02f0b3ba7c5c387dd669f5e5b90825  hvgdecision-0.10.0-py3-none-any.whl
+d72d5e320ddf18c0b8b599c4adec8630762d6e6c34ef0391470088c3127b9d18  hvgdecision-0.10.0.tar.gz

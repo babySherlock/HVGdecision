@@ -1,0 +1,17 @@
+HVGDecision 0.10.0
+
+README_CN.md                         中文用法与参数
+README.md                            GitHub 英文首页
+INSTALL_CN.md                        服务器安装
+examples/01_current_workflow.ipynb    当前接口示例 notebook
+examples/01_current_workflow.py       当前接口示例脚本
+docs/METHODS.md                      数学公式、默认阈值与局限
+docs/OUTPUT_SCHEMA.md                输出字段定义
+docs/MIGRATION.md                    0.9.1 迁移说明
+docs/ENGINE_PROVENANCE.json           notebook 引擎来源与哈希
+docs/TESTING.md                      测试范围与记录
+tests/                              自动化测试
+dist/                               配套 wheel 与源码分发包
+
+legacy_0_9 子目录是历史教程，不是当前默认流程。
+没有包含真实细胞数据，也没有上传到 GitHub/PyPI。

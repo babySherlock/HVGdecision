@@ -1,0 +1,8 @@
+include README.md README_CN.md INSTALL_CN.md CHANGELOG.md CITATION.cff LICENSE
+include environment.yml PACKAGE_CONTENTS_CN.txt
+recursive-include docs *.md *.json *.txt
+recursive-include examples *.py *.ipynb *.md
+recursive-include configs *.yml
+recursive-include tests *.py *.csv
+recursive-include .github *.yml
+global-exclude *.pyc .DS_Store
