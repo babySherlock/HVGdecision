@@ -146,26 +146,3 @@ AC147651.3
 
 Final Query panel: 1997
 ```
-
-这三个基因不是硬编码在补丁里；它们来自当前安装的 HVGDecision v0.10.0 风险结果与 Query-specific HVG2000 的交集。
-
-## 输出审计
-
-工作目录会保存：
-
-- `REFERENCE_span_fallback_audit.csv`
-- `REFERENCE_hvg_2000.csv`
-- `REFERENCE_risk_genes.csv`
-- `QUERY_span_fallback_audit.csv`
-- `QUERY_hvg_2000.csv`
-- `REFERENCE_to_QUERY_transfer_audit.csv`
-- `QUERY_removed_by_REFERENCE_risk.csv`
-- `QUERY_refined_hvg_panel.csv`
-- `seuratv3_span_fallback_audit.csv`
-- `experiment_summary.csv`
-
-## 为什么这是补丁而不是替换版主 wheel
-
-当前会话没有 HVGDecision v0.10.0 的完整源码/原始 wheel。为了不把 v0.10.0 的 `donor_aware` 核心误替换成旧版算法，本发布物有意把风险学习委托给你已经安装的 v0.10.0。
-
-如果要发布正式的 `hvgdecision-0.10.1-py3-none-any.whl` 主 wheel，应在 v0.10.0 原源码上把同样的 span fallback 和 Reference→Query wrapper 合并进去后再构建。
