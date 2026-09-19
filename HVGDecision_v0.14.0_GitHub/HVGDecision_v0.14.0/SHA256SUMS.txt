@@ -1,0 +1,1 @@
+ef59e78382bb0d634c98755a20c0ebc56e0e67b8a94ed2cdc146d1fe81684a22  dist/hvgdecision-0.14.0-py3-none-any.whl
